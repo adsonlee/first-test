@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
-  "name": "my-static-site",
+  "name": "first-test",
   "compatibility_date": "2025-12-09",
   "assets": {
     "directory": "./"
