@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小学生迷宫大冒险 - 难度升级版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- 配置Tailwind自定义样式 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#FF6B6B',
+                        secondary: '#4ECDC4',
+                        light: '#F7FFF7',
+                        dark: '#1A535C',
+                        maze: '#FFE66D',
+                        obstacle: '#FF9F1C'
+                    },
+                    fontFamily: {
+                        comic: ['Comic Sans MS', 'Marker Felt', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .btn-shadow {
+                box-shadow: 0 4px 0 #1A535C, 0 6px 10px rgba(0,0,0,0.2);
+            }
+            .btn-active {
+                transform: translateY(4px);
+                box-shadow: 0 2px 0 #1A535C, 0 4px 6px rgba(0,0,0,0.2);
+            }
+            .maze-border {
+                border-image: linear-gradient(to right, #FF6B6B, #4ECDC4) 1;
+            }
+            .vision-weak {
+                filter: brightness(0.9) contrast(0.9) blur(0.5px);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-light to-secondary min-h-screen font-comic text-dark flex flex-col items-center justify-start p-4 md:p-8">
+    <!-- 游戏标题 -->
+    <header class="text-center mb-6 w-full">
+        <h1 class="text-[clamp(2rem,5vw,3.5rem)] font-bold text-primary drop-shadow-lg mb-2">迷宫大冒险</h1>
+        <p class="text-[clamp(1rem,2vw,1.2rem)] text-dark/80">帮助小笑脸找到出口吧！<span class="text-primary">方向键/虚拟按钮移动</span></p>
+        <p id="difficultyTip" class="text-sm text-obstacle font-bold mt-2">当前难度：中等 - 普通迷宫，无限制</p>
+    </header>
+
+    <!-- 游戏控制面板 -->
+    <div class="flex flex-wrap justify-center items-center gap-4 mb-6 w-full max-w-3xl">
+        <div class="bg-white/80 rounded-lg p-3 shadow-md flex items-center gap-3">
+            <label class="font-bold">难度：</label>
+            <select id="difficulty" class="px-3 py-2 rounded border-2 border-dark/30 focus:outline-none focus:border-primary">
+                <option value="easy">简单 (8x8)</option>
+                <option value="medium" selected>中等 (14x14)</option>
+                <option value="hard">困难 (20x20)</option>
+                <option value="insane">超难 (26x26)</option>
+            </select>
+        </div>
+        <button id="resetBtn" class="bg-primary text-white px-6 py-3 rounded-lg font-bold btn-shadow hover:bg-primary/90 transition-all active:btn-active">
+            <i class="fa fa-refresh mr-2"></i>重新开始
+        </button>
+        <div class="bg-white/80 rounded-lg p-3 shadow-md">
+            <span class="font-bold">计时：</span>
+            <span id="timer" class="text-primary font-bold">00:00</span>
+        </div>
+        <div class="bg-white/80 rounded-lg p-3 shadow-md hidden md:block">
+            <span class="font-bold">步数：</span>
+            <span id="stepCounter" class="text-obstacle font-bold">0</span>
+        </div>
+    </div>
+
+    <!-- 游戏主容器 -->
+    <div class="relative bg-dark/10 rounded-2xl p-4 shadow-xl mb-6">
+        <canvas id="mazeCanvas" class="rounded-xl bg-white shadow-inner"></canvas>
+        <!-- 通关提示 -->
+        <div id="successModal" class="hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white/95 p-8 rounded-2xl shadow-2xl text-center z-10">
+            <h2 class="text-[clamp(1.5rem,3vw,2rem)] text-primary font-bold mb-4">🎉 恭喜通关！ 🎉</h2>
+            <p class="text-dark mb-3" id="successTime">你用了XX秒完成迷宫！</p>
+            <p class="text-dark mb-6" id="successStep">你走了XX步！</p>
+            <button id="playAgainBtn" class="bg-secondary text-white px-6 py-3 rounded-lg font-bold btn-shadow hover:bg-secondary/90 transition-all active:btn-active">
+                <i class="fa fa-play mr-2"></i>再玩一次
+            </button>
+        </div>
+    </div>
+
+    <!-- 移动端虚拟方向键 -->
+    <div class="md:hidden flex flex-col items-center gap-3 w-full max-w-xs mb-6">
+        <button id="upBtn" class="bg-primary/90 text-white w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-lg hover:bg-primary active:scale-95 transition-all">
+            <i class="fa fa-arrow-up"></i>
+        </button>
+        <div class="flex gap-3">
+            <button id="leftBtn" class="bg-primary/90 text-white w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-lg hover:bg-primary active:scale-95 transition-all">
+                <i class="fa fa-arrow-left"></i>
+            </button>
+            <button id="downBtn" class="bg-primary/90 text-white w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-lg hover:bg-primary active:scale-95 transition-all">
+                <i class="fa fa-arrow-down"></i>
+            </button>
+            <button id="rightBtn" class="bg-primary/90 text-white w-16 h-16 rounded-full flex items-center justify-center text-2xl shadow-lg hover:bg-primary active:scale-95 transition-all">
+                <i class="fa fa-arrow-right"></i>
+            </button>
+        </div>
+        <!-- 移动端步数显示 -->
+        <div class="bg-white/80 rounded-lg p-3 shadow-md mt-3 w-full text-center">
+            <span class="font-bold">步数：</span>
+            <span id="mobileStepCounter" class="text-obstacle font-bold">0</span>
+        </div>
+    </div>
+
+    <!-- 游戏说明 -->
+    <div class="bg-white/80 rounded-lg p-4 shadow-md w-full max-w-3xl text-sm md:text-base">
+        <h3 class="font-bold text-primary mb-2">游戏说明</h3>
+        <ul class="list-disc list-inside text-dark/80 space-y-1">
+            <li>使用<span class="font-bold">键盘方向键</span>或<span class="font-bold">屏幕虚拟按钮</span>移动小笑脸</li>
+            <li>从左上角的起点出发，到达右下角的出口即可通关</li>
+            <li>难度越高，迷宫越复杂，还会出现<span class="text-obstacle font-bold">橙色障碍物</span>和视觉干扰</li>
+            <li>超难模式下，角色<span class="font-bold">无法往回走</span>（禁止一步返回）</li>
+        </ul>
+    </div>
+
+    <script>
+        // 游戏核心变量
+        const canvas = document.getElementById('mazeCanvas');
+        const ctx = canvas.getContext('2d');
+        const difficultySelect = document.getElementById('difficulty');
+        const resetBtn = document.getElementById('resetBtn');
+        const timerEl = document.getElementById('timer');
+        const stepCounter = document.getElementById('stepCounter');
+        const mobileStepCounter = document.getElementById('mobileStepCounter');
+        const successModal = document.getElementById('successModal');
+        const successTime = document.getElementById('successTime');
+        const successStep = document.getElementById('successStep');
+        const playAgainBtn = document.getElementById('playAgainBtn');
+        const difficultyTip = document.getElementById('difficultyTip');
+        const directionBtns = {
+            up: document.getElementById('upBtn'),
+            down: document.getElementById('downBtn'),
+            left: document.getElementById('leftBtn'),
+            right: document.getElementById('rightBtn')
+        };
+
+        // 迷宫配置 - 升级后增加更多参数
+        let mazeConfig = {
+            cellSize: 35,    // 缩小格子大小，适配更大的迷宫
+            cols: 14,        // 列数（默认中等难度）
+            rows: 14,        // 行数
+            maze: [],        // 迷宫数据（0=通路，1=墙壁，2=障碍物）
+            player: { x: 1, y: 1 }, // 玩家位置
+            end: { x: 0, y: 0 },    // 终点位置
+            isPlaying: false,       // 游戏是否进行中
+            startTime: 0,           // 开始时间
+            timerInterval: null,    // 计时定时器
+            elapsedTime: 0,         // 已用时间
+            stepCount: 0,           // 移动步数
+            lastDir: null,          // 上一次移动方向（超难模式限制）
+            difficulty: 'medium',   // 当前难度
+            hasObstacle: false,     // 是否生成障碍物
+            visionWeak: false       // 是否开启视觉弱化
+        };
+
+        // 难度配置映射 - 升级后增加超难难度，新增障碍物、视觉、移动限制
+        const difficultyMap = {
+            easy: { 
+                cols: 8, rows: 8, 
+                tip: '简单 - 小迷宫，无障碍物，无限制',
+                obstacle: false, visionWeak: false, backLimit: false 
+            },
+            medium: { 
+                cols: 14, rows: 14, 
+                tip: '中等 - 普通迷宫，无障碍物，无限制',
+                obstacle: false, visionWeak: false, backLimit: false 
+            },
+            hard: { 
+                cols: 20, rows: 20, 
+                tip: '困难 - 大迷宫，有橙色障碍物，视觉轻微弱化',
+                obstacle: true, visionWeak: true, backLimit: false 
+            },
+            insane: { 
+                cols: 26, rows: 26, 
+                tip: '超难 - 超大迷宫，多障碍物，视觉弱化，禁止一步返回',
+                obstacle: true, visionWeak: true, backLimit: true 
+            }
+        };
+
+        // 方向映射（用于超难模式的返回限制）
+        const dirOpposite = {
+            up: 'down',
+            down: 'up',
+            left: 'right',
+            right: 'left',
+            null: null
+        };
+
+        // 初始化画布大小
+        function initCanvas() {
+            const { cols, rows, cellSize } = mazeConfig;
+            canvas.width = cols * cellSize;
+            canvas.height = rows * cellSize;
+            // 根据难度设置视觉效果
+            if (mazeConfig.visionWeak) {
+                canvas.classList.add('vision-weak');
+            } else {
+                canvas.classList.remove('vision-weak');
+            }
+        }
+
+        // 生成随机迷宫 - 升级后增加障碍物生成逻辑，提升迷宫复杂度
+        function generateMaze() {
+            const { cols, rows, hasObstacle } = mazeConfig;
+            // 初始化迷宫：全部设为墙壁
+            const maze = Array(rows).fill().map(() => Array(cols).fill(1));
+            const stack = [];
+            
+            // 起点设为通路（左上角，避开边界）
+            const startX = 1;
+            const startY = 1;
+            maze[startY][startX] = 0;
+            stack.push({ x: startX, y: startY });
+
+            // 方向：上、右、下、左（增加随机权重，提升复杂度）
+            const directions = [
+                { dx: 0, dy: -2, dir: 'up' }, // 上
+                { dx: 2, dy: 0, dir: 'right' },  // 右
+                { dx: 0, dy: 2, dir: 'down' },  // 下
+                { dx: -2, dy: 0, dir: 'left' }  // 左
+            ];
+
+            // 递归回溯挖路 - 优化随机逻辑，让迷宫更复杂
+            while (stack.length > 0) {
+                const current = stack.pop();
+                // 随机打乱方向，增加迷宫的不规则性
+                const shuffledDirs = [...directions].sort(() => Math.random() - 0.5);
+                let hasNext = false;
+
+                for (const dir of shuffledDirs) {
+                    const newX = current.x + dir.dx;
+                    const newY = current.y + dir.dy;
+                    // 检查是否在迷宫范围内且未被访问
+                    if (newX > 0 && newX < cols - 1 && newY > 0 && newY < rows - 1 && maze[newY][newX] === 1) {
+                        // 挖通当前格子和新格子之间的墙壁
+                        maze[current.y + dir.dy/2][current.x + dir.dx/2] = 0;
+                        maze[newY][newX] = 0;
+                        stack.push(current);
+                        stack.push({ x: newX, y: newY });
+                        hasNext = true;
+                        break;
+                    }
+                }
+
+                // 增加死胡同的概率，提升迷宫复杂度
+                if (!hasNext && stack.length > 0) {
+                    const randomDir = directions[Math.floor(Math.random() * directions.length)];
+                    const newX = current.x + randomDir.dx;
+                    const newY = current.y + randomDir.dy;
+                    if (newX > 0 && newX < cols - 1 && newY > 0 && newY < rows - 1) {
+                        maze[newY][newX] = 1;
+                    }
+                }
+            }
+
+            // 生成障碍物（困难/超难模式）
+            if (hasObstacle) {
+                const obstacleCount = Math.floor((cols * rows) / 25); // 根据迷宫大小计算障碍物数量
+                for (let i = 0; i < obstacleCount; i++) {
+                    const obsX = Math.floor(Math.random() * (cols - 2)) + 1;
+                    const obsY = Math.floor(Math.random() * (rows - 2)) + 1;
+                    // 避开起点、终点和通路的关键位置
+                    if ((obsX !== startX || obsY !== startY) && maze[obsY][obsX] === 0) {
+                        maze[obsY][obsX] = 2;
+                    }
+                }
+            }
+
+            // 设置终点（右下角，确保是通路）
+            let endX = cols - 2;
+            let endY = rows - 2;
+            if (maze[endY][endX] !== 0) {
+                // 如果终点是墙壁/障碍物，找附近的通路
+                for (let x = cols - 2; x > 0; x--) {
+                    for (let y = rows - 2; y > 0; y--) {
+                        if (maze[y][x] === 0) {
+                            endX = x;
+                            endY = y;
+                            break;
+                        }
+                    }
+                    if (maze[endY][endX] === 0) break;
+                }
+            }
+
+            mazeConfig.maze = maze;
+            mazeConfig.player = { x: startX, y: startY };
+            mazeConfig.end = { x: endX, y: endY };
+            mazeConfig.lastDir = null; // 重置上一次方向
+        }
+
+        // 绘制迷宫 - 升级后增加障碍物、优化视觉效果
+        function drawMaze() {
+            const { maze, cellSize, player, end } = mazeConfig;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 绘制迷宫格子
+            maze.forEach((row, y) => {
+                row.forEach((cell, x) => {
+                    if (cell === 1) {
+                        // 绘制墙壁
+                        ctx.fillStyle = '#1A535C';
+                        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                    } else if (cell === 2) {
+                        // 绘制障碍物（橙色）
+                        ctx.fillStyle = '#FF9F1C';
+                        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                        // 障碍物装饰
+                        ctx.fillStyle = '#E76F51';
+                        ctx.beginPath();
+                        ctx.arc(x * cellSize + cellSize/2, y * cellSize + cellSize/2, cellSize/6, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else {
+                        // 绘制通路背景（根据视觉弱化调整颜色）
+                        ctx.fillStyle = mazeConfig.visionWeak ? '#F0F8F0' : '#F7FFF7';
+                        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                        // 绘制格子边框（浅色）
+                        ctx.strokeStyle = mazeConfig.visionWeak ? '#D6D6D6' : '#E6E6E6';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(x * cellSize, y * cellSize, cellSize, cellSize);
+                    }
+                });
+            });
+
+            // 绘制终点（优化样式）
+            ctx.fillStyle = '#4ECDC4';
+            ctx.beginPath();
+            ctx.arc(end.x * cellSize + cellSize/2, end.y * cellSize + cellSize/2, cellSize/3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#1A535C';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            // 终点装饰
+            ctx.fillStyle = '#F7FFF7';
+            ctx.beginPath();
+            ctx.arc(end.x * cellSize + cellSize/2, end.y * cellSize + cellSize/2, cellSize/6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 绘制玩家（笑脸，优化样式）
+            ctx.fillStyle = '#FF6B6B';
+            ctx.beginPath();
+            ctx.arc(player.x * cellSize + cellSize/2, player.y * cellSize + cellSize/2, cellSize/3, 0, Math.PI * 2);
+            ctx.fill();
+            // 绘制笑脸眼睛
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(player.x * cellSize + cellSize/3, player.y * cellSize + cellSize/3, cellSize/10, 0, Math.PI * 2);
+            ctx.arc(player.x * cellSize + 2*cellSize/3, player.y * cellSize + cellSize/3, cellSize/10, 0, Math.PI * 2);
+            ctx.fill();
+            // 绘制笑脸嘴巴
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(player.x * cellSize + cellSize/2, player.y * cellSize + cellSize/2, cellSize/4, 0, Math.PI);
+            ctx.stroke();
+        }
+
+        // 移动玩家 - 升级后增加步数统计、超难模式返回限制、障碍物检测
+        function movePlayer(dx, dy, dirName) {
+            if (!mazeConfig.isPlaying) return;
+
+            const { maze, player, difficulty, lastDir, backLimit } = mazeConfig;
+            const diffConfig = difficultyMap[difficulty];
+            
+            // 超难模式：禁止一步返回（往相反方向移动）
+            if (diffConfig.backLimit && dirOpposite[lastDir] === dirName) {
+                return;
+            }
+
+            const newX = player.x + dx;
+            const newY = player.y + dy;
+            // 检查是否是墙壁、障碍物或边界
+            if (newX >= 0 && newX < mazeConfig.cols && newY >= 0 && newY < mazeConfig.rows && maze[newY][newX] === 0) {
+                mazeConfig.player.x = newX;
+                mazeConfig.player.y = newY;
+                mazeConfig.stepCount++; // 统计步数
+                mazeConfig.lastDir = dirName; // 记录当前方向
+                // 更新步数显示
+                stepCounter.textContent = mazeConfig.stepCount;
+                mobileStepCounter.textContent = mazeConfig.stepCount;
+                drawMaze();
+                // 检查是否到达终点
+                checkWin();
+            }
+        }
+
+        // 检查是否通关
+        function checkWin() {
+            const { player, end, isPlaying, elapsedTime, stepCount } = mazeConfig;
+            if (player.x === end.x && player.y === end.y && isPlaying) {
+                // 停止计时
+                clearInterval(mazeConfig.timerInterval);
+                mazeConfig.isPlaying = false;
+                // 显示通关提示
+                successTime.textContent = `你用了${Math.round(elapsedTime)}秒完成迷宫！`;
+                successStep.textContent = `你走了${stepCount}步！`;
+                successModal.classList.remove('hidden');
+            }
+        }
+
+        // 格式化计时（00:00）
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+            return `${mins}:${secs}`;
+        }
+
+        // 开始计时
+        function startTimer() {
+            mazeConfig.startTime = Date.now();
+            mazeConfig.timerInterval = setInterval(() => {
+                mazeConfig.elapsedTime = (Date.now() - mazeConfig.startTime) / 1000;
+                timerEl.textContent = formatTime(mazeConfig.elapsedTime);
+            }, 100);
+        }
+
+        // 重置游戏 - 升级后适配新的难度配置
+        function resetGame() {
+            // 停止现有计时
+            if (mazeConfig.timerInterval) clearInterval(mazeConfig.timerInterval);
+            // 更新难度配置
+            const difficulty = difficultySelect.value;
+            const diffConfig = difficultyMap[difficulty];
+            mazeConfig.difficulty = difficulty;
+            mazeConfig.cols = diffConfig.cols;
+            mazeConfig.rows = diffConfig.rows;
+            mazeConfig.hasObstacle = diffConfig.obstacle;
+            mazeConfig.visionWeak = diffConfig.visionWeak;
+            // 更新难度提示
+            difficultyTip.textContent = diffConfig.tip;
+            // 重新初始化画布和生成迷宫
+            initCanvas();
+            generateMaze();
+            drawMaze();
+            // 重置计时和步数
+            mazeConfig.elapsedTime = 0;
+            mazeConfig.stepCount = 0;
+            timerEl.textContent = '00:00';
+            stepCounter.textContent = '0';
+            mobileStepCounter.textContent = '0';
+            // 隐藏通关提示
+            successModal.classList.add('hidden');
+            // 开始游戏
+            mazeConfig.isPlaying = true;
+            startTimer();
+        }
+
+        // 事件监听：键盘方向键 - 升级后传递方向名称
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowUp': movePlayer(0, -1, 'up'); break;
+                case 'ArrowDown': movePlayer(0, 1, 'down'); break;
+                case 'ArrowLeft': movePlayer(-1, 0, 'left'); break;
+                case 'ArrowRight': movePlayer(1, 0, 'right'); break;
+            }
+        });
+
+        // 事件监听：虚拟方向键 - 升级后传递方向名称
+        directionBtns.up.addEventListener('click', () => movePlayer(0, -1, 'up'));
+        directionBtns.down.addEventListener('click', () => movePlayer(0, 1, 'down'));
+        directionBtns.left.addEventListener('click', () => movePlayer(-1, 0, 'left'));
+        directionBtns.right.addEventListener('click', () => movePlayer(1, 0, 'right'));
+
+        // 事件监听：重置按钮和再来一次按钮
+        resetBtn.addEventListener('click', resetGame);
+        playAgainBtn.addEventListener('click', resetGame);
+
+        // 事件监听：难度选择变化（更新提示）
+        difficultySelect.addEventListener('change', () => {
+            const diffConfig = difficultyMap[difficultySelect.value];
+            difficultyTip.textContent = diffConfig.tip;
+        });
+
+        // 初始化游戏
+        window.addEventListener('load', () => {
+            resetGame();
+        });
+    </script>
+</body>
+</html>
